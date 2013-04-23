@@ -35,40 +35,45 @@
 import os
 import sys
 
-ubuntu_map = {
-    '11.10': 'oneiric',
-    '11.04': 'natty',
-    '10.10': 'maverick',
-    '10.04': 'lucid',
+fedora_map = {
+    '19': 'schrodingers'
+    '18': 'beefy',
+    '17': 'spherical',
     }
 
-def ubuntu_release():
+fedora_inv_map = dict([[v,k] for k,v in fedora_map.items()])
+
+def fedora_release():
     """
-    WARNING: this can only be called on an Ubuntu system
+    WARNING: this can only be called on an Fedora system
     """
     if not os.path.isfile('/etc/issue'):
-        raise Exception("this is not an ubuntu system")        
+        raise Exception("this is not an fedora system")        
     f = open('/etc/issue')
     for s in f:
-        if s.startswith('Ubuntu'):
-            v = s.split()[1]
+        if s.startswith('Fedora'):
+            v = s.split()[2]
             v = '.'.join(v.split('.')[:2])
         try:
-            return ubuntu_map[v]
+            return fedora_map[v]
         except KeyError:
-            raise Exception("unrecognized ubuntu version %s" % v)
-    raise Exception("could not parse ubuntu release version")
+            raise Exception("unrecognized fedora version %s" % v)
+    raise Exception("could not parse fedora release version")
 
-def debianize_name(name):
+def fedora_release_version(fedora_rel)
+    return fedora_inv_map[fedora_rel]
+
+def redhatify_name(name):
     """
-    Convert ROS stack name to debian conventions (dashes, not underscores)
+    Convert ROS stack name to rpm conventions (dashes, not underscores)
     """
     return name.replace('_', '-')
 
-def debianize_version(stack_version, distro_version, ubuntu_rel=None):
+def redhatify_version(stack_version, distro_version, fedora_rel=None):
     """
-    WARNING: this can only be called on an Ubuntu system and will lock to the platform it is called on
+    WARNING: this can only be called on an Fedora system and will lock to the platform it is called on
     """
-    if ubuntu_rel is None:
-        ubuntu_rel = ubuntu_release()
-    return stack_version+'-'+distro_version+'~%s'%ubuntu_rel
+    if fedora_rel is None:
+        fedora_rel = fedora_release()
+    fedora_ver = fedora_release_version(fedora_rel)
+    return stack_version+'-'+distro_version+'.fc%s'%fedora_ver

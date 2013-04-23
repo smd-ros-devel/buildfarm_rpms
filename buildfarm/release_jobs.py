@@ -14,7 +14,7 @@ import yaml
 import datetime
 from rospkg.distro import load_distro, distro_uri
 
-from ros_distro import debianize_package_name
+from ros_distro import rpmify_package_name
 
 from . import repo, jenkins_support
 
@@ -23,14 +23,14 @@ import jenkins
 
 class Templates(object):
     template_dir = os.path.dirname(__file__)
-    config_sourcedeb = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/config.source.xml.em')  # A config.xml template for sourcedebs.
-    command_sourcedeb = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/source_build.sh.em')  # The bash script that the sourcedebs config.xml runs.
-    command_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/binary_build.sh.em')  # builds binary debs.
-    config_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/config.binary.xml.em')  # A config.xml template for something that runs a shell script
-    config_dry_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/config.xml.em')  # A config.xml template for something that runs a shell script
-    config_sync_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/sync_config.xml.em')  # A config.xml template for something that runs a shell script
-    command_dry_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/build.sh.em')  # A config.xml template for something that runs a shell script
-    command_sync_binarydeb = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/sync.sh.em')  # A config.xml template for something that runs a shell script
+    config_sourcerpm = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/config.source.xml.em')  # A config.xml template for sourcerpms.
+    command_sourcerpm = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/source_build.sh.em')  # The bash script that the sourcerpms config.xml runs.
+    command_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/binary_build.sh.em')  # builds binary rpms.
+    config_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/release_job/config.binary.xml.em')  # A config.xml template for something that runs a shell script
+    config_dry_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/config.xml.em')  # A config.xml template for something that runs a shell script
+    config_sync_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/sync_config.xml.em')  # A config.xml template for something that runs a shell script
+    command_dry_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/build.sh.em')  # A config.xml template for something that runs a shell script
+    command_sync_binaryrpm = pkg_resources.resource_string('buildfarm', 'resources/templates/dry_release/sync.sh.em')  # A config.xml template for something that runs a shell script
 
 
 def expand(config_template, d):
@@ -38,15 +38,12 @@ def expand(config_template, d):
     return s
 
 
-def compute_missing(distros, arches, fqdn, rosdistro, sourcedeb_only=False):
+def compute_missing(distros, arches, fqdn, rosdistro, sourcerpm_only=False):
     """ Compute what packages are missing from a repo based on the rosdistro files, both wet and dry. """
 
     repo_url = 'http://%s/repos/building' % fqdn
 
-    if rosdistro != 'fuerte':
-        from ros_distro import Rosdistro
-    else:
-        from ros_distro_fuerte import Rosdistro
+    from ros_distro import Rosdistro
     rd = Rosdistro(rosdistro)
     # We take the intersection of repo-specific targets with default
     # targets.
@@ -60,8 +57,8 @@ def compute_missing(distros, arches, fqdn, rosdistro, sourcedeb_only=False):
     for short_package_name in rd.get_package_list():
         #print ('Analyzing WET stack "%s" for "%s"' % (r['url'], target_distros))
 
-        # todo check if sourcedeb is present with the right version
-        deb_name = debianize_package_name(rosdistro, short_package_name)
+        # todo check if sourcerpm is present with the right version
+        rpm_name = rpmify_package_name(rosdistro, short_package_name)
         expected_version = rd.get_version(short_package_name, full_version=True)
 
         # Don't report packages as missing if their version is None
@@ -71,14 +68,14 @@ def compute_missing(distros, arches, fqdn, rosdistro, sourcedeb_only=False):
 
         missing[short_package_name] = []
         for d in target_distros:
-            if not repo.deb_in_repo(repo_url, deb_name, str(expected_version) + d, d, arch='na', source=True):
+            if not repo.rpm_in_repo(repo_url, rpm_name, str(expected_version) + d, d, arch='na', source=True):
                 missing[short_package_name].append('%s_source' % d)
-            if not sourcedeb_only:
+            if not sourcerpm_only:
                 for a in arches:
-                    if not repo.deb_in_repo(repo_url, deb_name, str(expected_version) + ".*", d, a):
+                    if not repo.rpm_in_repo(repo_url, rpm_name, str(expected_version) + ".*", d, a):
                         missing[short_package_name].append('%s_%s' % (d, a))
 
-    if not sourcedeb_only:
+    if not sourcerpm_only:
         #dry stacks
         # dry dependencies
         dist = load_distro(distro_uri(rosdistro))
@@ -96,9 +93,9 @@ def compute_missing(distros, arches, fqdn, rosdistro, sourcedeb_only=False):
                 print("Skipping package %s with no version" % s)
                 continue
             missing[s] = []
-            # for each distro arch check if the deb is present. If not trigger the build.
+            # for each distro arch check if the rpm is present. If not trigger the build.
             for (d, a) in distro_arches:
-                if not repo.deb_in_repo(repo_url, debianize_package_name(rosdistro, s), expected_version + ".*", d, a):
+                if not repo.rpm_in_repo(repo_url, rpmify_package_name(rosdistro, s), expected_version + ".*", d, a):
                     missing[s].append('%s_%s' % (d, a))
 
     return missing
@@ -201,7 +198,7 @@ def dry_get_stack_dependencies(rosdistro):
 def dry_generate_jobgraph(rosdistro, wet_jobgraph, stack_depends):
     jobgraph = {}
     for key, val in stack_depends.iteritems():
-        dry_depends = [debianize_package_name(rosdistro, p) for p in val]
+        dry_depends = [rpmify_package_name(rosdistro, p) for p in val]
 
         untracked_wet_packages = [p for p in dry_depends if p in wet_jobgraph]
 
@@ -210,7 +207,7 @@ def dry_generate_jobgraph(rosdistro, wet_jobgraph, stack_depends):
             #print("adding packages for %s - [%s] " % (p, ', '.join(wet_jobgraph[p])) )
             extra_packages.update(wet_jobgraph[p])
 
-        jobgraph[debianize_package_name(rosdistro, key)] = dry_depends + list(extra_packages)
+        jobgraph[rpmify_package_name(rosdistro, key)] = dry_depends + list(extra_packages)
     return jobgraph
 
 
@@ -243,38 +240,38 @@ def create_jenkins_job(jobname, config, jenkins_instance):
         return False
 
 
-def sourcedeb_job_name(packagename):
-    return "%(packagename)s_sourcedeb" % locals()
+def sourcerpm_job_name(packagename, distro):
+    return "%(packagename)s_sourcerpm_%(distro)s" % locals()
 
 
-def create_sourcedeb_config(d):
+def create_sourcerpm_config(d):
     #Create the bash script the runs inside the job
     #need the command to be safe for xml.
-    d['COMMAND'] = escape(expand(Templates.command_sourcedeb, d))
+    d['COMMAND'] = escape(expand(Templates.command_sourcerpm, d))
     d['TIMESTAMP'] = datetime.datetime.now()
-    return expand(Templates.config_sourcedeb, d)
+    return expand(Templates.config_sourcerpm, d)
 
 
-def create_binarydeb_config(d):
+def create_binaryrpm_config(d):
     d['TIMESTAMP'] = datetime.datetime.now()
-    d['COMMAND'] = escape(expand(Templates.command_binarydeb, d))
-    return expand(Templates.config_binarydeb, d)
+    d['COMMAND'] = escape(expand(Templates.command_binaryrpm, d))
+    return expand(Templates.config_binaryrpm, d)
 
 
-def create_dry_binarydeb_config(d):
-    d['COMMAND'] = escape(expand(Templates.command_dry_binarydeb, d))
+def create_dry_binaryrpm_config(d):
+    d['COMMAND'] = escape(expand(Templates.command_dry_binaryrpm, d))
     d['TIMESTAMP'] = datetime.datetime.now()
-    return expand(Templates.config_dry_binarydeb, d)
+    return expand(Templates.config_dry_binaryrpm, d)
 
 
-def create_sync_binarydeb_config(d):
-    d['COMMAND'] = escape(expand(Templates.command_sync_binarydeb, d))
+def create_sync_binaryrpm_config(d):
+    d['COMMAND'] = escape(expand(Templates.command_sync_binaryrpm, d))
     d['TIMESTAMP'] = datetime.datetime.now()
-    return expand(Templates.config_sync_binarydeb, d)
+    return expand(Templates.config_sync_binaryrpm, d)
 
 
-def binarydeb_job_name(packagename, distro, arch):
-    return "%(packagename)s_binarydeb_%(distro)s_%(arch)s" % locals()
+def binaryrpm_job_name(packagename, distro, arch):
+    return "%(packagename)s_binaryrpm_%(distro)s_%(arch)s" % locals()
 
 
 def calc_child_jobs(packagename, distro, arch, jobgraph):
@@ -282,7 +279,7 @@ def calc_child_jobs(packagename, distro, arch, jobgraph):
     if jobgraph:
         for package, deps in jobgraph.iteritems():
             if packagename in deps:
-                children.append(binarydeb_job_name(package, distro, arch))
+                children.append(binaryrpm_job_name(package, distro, arch))
     return children
 
 
@@ -294,9 +291,9 @@ def add_dependent_to_dict(packagename, jobgraph):
     return dependents
 
 
-def dry_binarydeb_jobs(stackname, dry_maintainers, rosdistro, distros, arches, fqdn, jobgraph, packages_for_sync):
-    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_debs_config())
-    package = debianize_package_name(rosdistro, stackname)
+def dry_binaryrpm_jobs(stackname, dry_maintainers, rosdistro, distros, arches, fqdn, jobgraph, packages_for_sync):
+    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_rpms_config())
+    package = rpmify_package_name(rosdistro, stackname)
     d = dict(
         FQDN=fqdn,
         PACKAGE=package,
@@ -316,22 +313,22 @@ def dry_binarydeb_jobs(stackname, dry_maintainers, rosdistro, distros, arches, f
             d["CHILD_PROJECTS"] = calc_child_jobs(package, distro, arch, jobgraph)
             d["DEPENDENTS"] = "True"
             if stackname == 'sync':
-                d["CHILD_PROJECTS"] = debianize_package_name(rosdistro, 'metapackage')
-                config = create_sync_binarydeb_config(d)
+                d["CHILD_PROJECTS"] = rpmify_package_name(rosdistro, 'metapackage')
+                config = create_sync_binaryrpm_config(d)
             else:
-                config = create_dry_binarydeb_config(d)
+                config = create_dry_binaryrpm_config(d)
             #print(config)
-            job_name = binarydeb_job_name(package, distro, arch)
+            job_name = binaryrpm_job_name(package, distro, arch)
             jobs.append((job_name, config))
             #print ("config of %s is %s" % (job_name, config))
     return jobs
 
 
-def binarydeb_jobs(package, maintainer_emails, distros, arches, apt_target_repository, fqdn, jobgraph):
-    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_debs_config())
+def binaryrpm_jobs(package, maintainer_emails, distros, arches, yum_target_repository, fqdn, jobgraph):
+    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_rpms_config())
     d = dict(
         DISTROS=distros,
-        APT_TARGET_REPOSITORY=apt_target_repository,
+        YUM_TARGET_REPOSITORY=yum_target_repository,
         FQDN=fqdn,
         PACKAGE=package,
         NOTIFICATION_EMAIL=' '.join(maintainer_emails),
@@ -344,15 +341,15 @@ def binarydeb_jobs(package, maintainer_emails, distros, arches, apt_target_repos
             d['DISTRO'] = distro
             d["CHILD_PROJECTS"] = calc_child_jobs(package, distro, arch, jobgraph)
             d["DEPENDENTS"] = add_dependent_to_dict(package, jobgraph)
-            config = create_binarydeb_config(d)
+            config = create_binaryrpm_config(d)
             #print(config)
-            job_name = binarydeb_job_name(package, distro, arch)
+            job_name = binaryrpm_job_name(package, distro, arch)
             jobs.append((job_name, config))
     return jobs
 
 
-def sourcedeb_job(package, maintainer_emails, distros, fqdn, release_uri, child_projects, rosdistro, short_package_name):
-    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_debs_config())
+def sourcerpm_job(package, maintainer_emails, distros, fqdn, release_uri, child_projects, rosdistro, short_package_name):
+    jenkins_config = jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_rpms_config())
     d = dict(
         RELEASE_URI=release_uri,
         RELEASE_BRANCH='master',
@@ -365,12 +362,18 @@ def sourcedeb_job(package, maintainer_emails, distros, fqdn, release_uri, child_
         SHORT_PACKAGE_NAME=short_package_name,
         USERNAME=jenkins_config.username
     )
-    return  (sourcedeb_job_name(package), create_sourcedeb_config(d))
+    jobs = []
+    for distro in distros:
+        d['DISTRO'] = distro
+        config = create_binaryrpm_config(d)
+        job_name = sourcerpm_job_name(package, distro, arch)
+        jobs.append((job_name, config))
+    return jobs
 
 
 def dry_doit(package, dry_maintainers, distros, arches, fqdn, rosdistro, jobgraph, commit, jenkins_instance, packages_for_sync):
 
-    jobs = dry_binarydeb_jobs(package, dry_maintainers, rosdistro, distros, arches, fqdn, jobgraph, packages_for_sync)
+    jobs = dry_binaryrpm_jobs(package, dry_maintainers, rosdistro, distros, arches, fqdn, jobgraph, packages_for_sync)
 
     successful_jobs = []
     failed_jobs = []
@@ -391,11 +394,11 @@ def dry_doit(package, dry_maintainers, distros, arches, fqdn, rosdistro, jobgrap
     return (unattempted_jobs, successful_jobs, failed_jobs)
 
 
-def doit(release_uri, package_name, package, distros, arches, apt_target_repository, fqdn, job_graph, rosdistro, short_package_name, commit, jenkins_instance):
+def doit(release_uri, package_name, package, distros, arches, yum_target_repository, fqdn, job_graph, rosdistro, short_package_name, commit, jenkins_instance):
     maintainer_emails = [m.email for m in package.maintainers]
-    binary_jobs = binarydeb_jobs(package_name, maintainer_emails, distros, arches, apt_target_repository, fqdn, job_graph)
+    binary_jobs = binaryrpm_jobs(package_name, maintainer_emails, distros, arches, yum_target_repository, fqdn, job_graph)
     child_projects = zip(*binary_jobs)[0]  # unzip the binary_jobs tuple
-    source_job = sourcedeb_job(package_name, maintainer_emails, distros, fqdn, release_uri, child_projects, rosdistro, short_package_name)
+    source_job = sourcerpm_job(package_name, maintainer_emails, distros, fqdn, release_uri, child_projects, rosdistro, short_package_name)
     jobs = [source_job] + binary_jobs
     successful_jobs = []
     failed_jobs = []

@@ -32,7 +32,7 @@
 #
 # Revision $Id: __init__.py 14995 2011-09-15 23:50:03Z kwc $
 
-from rosdeb.core import debianize_name, debianize_version
-from rosdeb.source_deb import make_source_deb, control_file
-from rosdeb.repo import get_Packages, get_depends, deb_in_repo, BadRepo
+from rosrpm.core import redhatify_name, redhatify_version, fedora_release_version
+from rosrpm.source_deb import make_source_deb, control_file
+from rosrpm.repo import get_Packages, get_depends, deb_in_repo, BadRepo
 

@@ -7,7 +7,7 @@ import tempfile
 
 from buildfarm import jenkins_support, release_jobs
 
-from buildfarm.ros_distro import debianize_package_name
+from buildfarm.ros_distro import rpmify_package_name
 
 import rospkg.distro
 
@@ -20,16 +20,16 @@ except ImportError:
 def parse_options():
     parser = argparse.ArgumentParser(
              description='Create a set of jenkins jobs '
-             'for source debs and binary debs for a catkin package.')
+             'for source rpms and binary rpms for a catkin package.')
     parser.add_argument('--fqdn', dest='fqdn',
-           help='The source repo to push to, fully qualified something. Default: taken from distro-build.yaml, for Fuerte: 50.28.27.175')
+           help='The source repo to push to, fully qualified something. Default: taken from distro-build.yaml')
     parser.add_argument(dest='rosdistro',
-           help='The ros distro. fuerte, groovy, hydro, ...')
+           help='The ros distro. groovy, hydro, ...')
     parser.add_argument('--distros', nargs='+',
-           help='A list of debian distros. Default: %(default)s',
+           help='A list of rpm distros. Default: %(default)s',
            default=[])
     parser.add_argument('--arches', nargs='+',
-           help='A list of debian architectures. Default: taken from distro-build.yaml, for Fuerte: [amd64, i386]')
+           help='A list of rpm architectures. Default: taken from distro-build.yaml')
     parser.add_argument('--commit', dest='commit',
            help='Really?', action='store_true', default=False)
     parser.add_argument('--delete', dest='delete',
@@ -46,19 +46,13 @@ def parse_options():
     if args.repos and args.delete:
         parser.error('A set of repos to create can not be combined with the --delete option.')
 
-    if args.rosdistro == 'fuerte':
-        if args.fqdn is None:
-            args.fqdn = '50.28.27.175'
-        if args.arches is None:
-            args.arches = ['amd64', 'i386']
-
     return args
 
 
-def doit(rd, distros, arches, apt_target_repository, fqdn, jobs_graph, rosdistro, packages, dry_maintainers, commit=False, delete_extra_jobs=False, whitelist_repos=None):
+def doit(rd, distros, arches, yum_target_repository, fqdn, jobs_graph, rosdistro, packages, dry_maintainers, commit=False, delete_extra_jobs=False, whitelist_repos=None):
     jenkins_instance = None
     if args.commit or delete_extra_jobs:
-        jenkins_instance = jenkins_support.JenkinsConfig_to_handle(jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_debs_config()))
+        jenkins_instance = jenkins_support.JenkinsConfig_to_handle(jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_rpms_config()))
 
     # Figure out default distros.  Command-line arg takes precedence; if
     # it's not specified, then read targets.yaml.
@@ -91,13 +85,13 @@ def doit(rd, distros, arches, apt_target_repository, fqdn, jobs_graph, rosdistro
             if not r.version:
                 print('- skipping "%s" since version is null' % p)
                 continue
-            pkg_name = rd.debianize_package_name(p)
+            pkg_name = rd.rpmify_package_name(p)
             results[pkg_name] = release_jobs.doit(r.url,
                  pkg_name,
                  packages[p],
                  target_distros,
                  target_arches,
-                 apt_target_repository,
+                 yum_target_repository,
                  fqdn,
                  jobs_graph,
                  rosdistro=rosdistro,
@@ -115,9 +109,7 @@ def doit(rd, distros, arches, apt_target_repository, fqdn, jobs_graph, rosdistro
         print ("No dry backports support")
         return results
 
-    if rosdistro == 'fuerte':
-        packages_for_sync = 300
-    elif rosdistro == 'groovy':
+    if rosdistro == 'groovy':
         packages_for_sync = 500
     elif rosdistro == 'hydro':
         packages_for_sync = 60
@@ -135,15 +127,15 @@ def doit(rd, distros, arches, apt_target_repository, fqdn, jobs_graph, rosdistro
         if not d.stacks[s].version:
             print('- skipping "%s" since version is null' % s)
             continue
-        results[rd.debianize_package_name(s)] = release_jobs.dry_doit(s, dry_maintainers[s], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
+        results[rd.rpmify_package_name(s)] = release_jobs.dry_doit(s, dry_maintainers[s], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
         #time.sleep(1)
 
     # special metapackages job
     if not whitelist_repos or 'metapackages' in whitelist_repos:
-        results[rd.debianize_package_name('metapackages')] = release_jobs.dry_doit('metapackages', [], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
+        results[rd.rpmify_package_name('metapackages')] = release_jobs.dry_doit('metapackages', [], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
 
     if not whitelist_repos or 'sync' in whitelist_repos:
-        results[rd.debianize_package_name('sync')] = release_jobs.dry_doit('sync', [], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
+        results[rd.rpmify_package_name('sync')] = release_jobs.dry_doit('sync', [], default_distros, target_arches, fqdn, rosdistro, jobgraph=jobs_graph, commit=commit, jenkins_instance=jenkins_instance, packages_for_sync=packages_for_sync)
 
     if delete_extra_jobs:
         assert(not whitelist_repos)
@@ -157,7 +149,7 @@ def doit(rd, distros, arches, apt_target_repository, fqdn, jobs_graph, rosdistro
 
         existing_jobs = set([j['name'] for j in jenkins_instance.get_jobs()])
         relevant_jobs = existing_jobs - configured_jobs
-        relevant_jobs = [j for j in relevant_jobs if rosdistro in j and ('_sourcedeb' in j or '_binarydeb' in j)]
+        relevant_jobs = [j for j in relevant_jobs if rosdistro in j and ('_sourcerpm' in j or '_binaryrpm' in j)]
 
         for j in relevant_jobs:
             print('Job "%s" detected as extra' % j)
@@ -177,27 +169,18 @@ if __name__ == '__main__':
     if not workspace:
         workspace = os.path.join(tempfile.gettempdir(), 'repo-workspace-%s' % args.rosdistro)
 
-    if args.rosdistro != 'fuerte':
-        from buildfarm.ros_distro import Rosdistro
-        rd = Rosdistro(args.rosdistro)
-        from buildfarm import dependency_walker
-        packages = dependency_walker.get_packages(workspace, rd, skip_update=args.skip_update)
-        dependencies = dependency_walker.get_jenkins_dependencies(args.rosdistro, packages)
+    from buildfarm.ros_distro import Rosdistro
+    rd = Rosdistro(args.rosdistro)
+    from buildfarm import dependency_walker
+    packages = dependency_walker.get_packages(workspace, rd, skip_update=args.skip_update)
+    dependencies = dependency_walker.get_jenkins_dependencies(args.rosdistro, packages)
 
-        apt_target_repository = rd._build_files[0].apt_target_repository
-        if args.fqdn is None:
-            fqdn_parts = urlsplit(apt_target_repository)
-            args.fqdn = fqdn_parts.netloc
-        if args.arches is None:
-            args.arches = rd.get_arches()
-    else:
-        apt_target_repository = 'http://' + args.fqdn + '/repos/building'
-        from buildfarm.ros_distro_fuerte import Rosdistro
-        rd = Rosdistro(args.rosdistro)
-        from buildfarm import dependency_walker_fuerte
-        stacks = dependency_walker_fuerte.get_stacks(workspace, rd._repoinfo, args.rosdistro, skip_update=args.skip_update)
-        dependencies = dependency_walker_fuerte.get_dependencies(args.rosdistro, stacks)
-        packages = stacks
+    yum_target_repository = rd._build_files[0].yum_target_repository
+    if args.fqdn is None:
+        fqdn_parts = urlsplit(yum_target_repository)
+        args.fqdn = fqdn_parts.netloc
+    if args.arches is None:
+        args.arches = rd.get_arches()
 
     release_jobs.check_for_circular_dependencies(dependencies)
 
@@ -211,15 +194,15 @@ if __name__ == '__main__':
     for k, v in dry_jobgraph.iteritems():
         combined_jobgraph[k] = v
 
-    # setup a job triggered by all other debjobs
-    combined_jobgraph[debianize_package_name(args.rosdistro, 'metapackages')] = combined_jobgraph.keys()
-    combined_jobgraph[debianize_package_name(args.rosdistro, 'sync')] = [debianize_package_name(args.rosdistro, 'metapackages')]
+    # setup a job triggered by all other rpmjobs
+    combined_jobgraph[rpmify_package_name(args.rosdistro, 'metapackages')] = combined_jobgraph.keys()
+    combined_jobgraph[rpmify_package_name(args.rosdistro, 'sync')] = [rpmify_package_name(args.rosdistro, 'metapackages')]
 
     results_map = doit(
         rd,
         args.distros,
         args.arches,
-        apt_target_repository,
+        yum_target_repository,
         args.fqdn,
         combined_jobgraph,
         rosdistro=args.rosdistro,

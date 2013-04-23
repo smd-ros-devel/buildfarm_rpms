@@ -25,13 +25,13 @@ def sanitize_package_name(name):
     return name.replace('_', '-')
 
 
-def debianize_package_name(rosdistro, name):
+def rpmify_package_name(rosdistro, name):
     if rosdistro == 'backports':
         return sanitize_package_name(name)
     return sanitize_package_name("ros-%s-%s" % (rosdistro, name))
 
 
-def undebianize_package_name(rosdistro, name):
+def unrpmify_package_name(rosdistro, name):
     if rosdistro != 'backports':
         prefix = 'ros-%s-' % rosdistro
         assert(name.startswith(prefix))
@@ -72,8 +72,8 @@ class Rosdistro:
     def get_package_xml(self, pkg_name):
         return self._dist.get_package_xml(pkg_name)
 
-    def debianize_package_name(self, package_name):
-        return debianize_package_name(self._rosdistro, package_name)
+    def rpmify_package_name(self, package_name):
+        return rpmify_package_name(self._rosdistro, package_name)
 
     def get_repo_list(self):
         return self._repoinfo.iterkeys()
@@ -144,8 +144,10 @@ class Rosdistro:
         config = {}
         config['local-name'] = local_name
 
+        distro_number = fedora_release_version(distro_name)
+
         config['version'] = 'upstream/%s' % version
-        config['version'] = 'debian/ros-%s-%s_%s_%s' % (self._rosdistro, local_name, version, distro_name)
+        config['version'] = 'rpm/ros-%s-%s-%s.%s' % (self._rosdistro, local_name, version, distro_number)
         #config['version'] = '%s-%s'%(local_name, version)
         config['uri'] = gbp_url
         return {'git': config}
@@ -159,4 +161,4 @@ def get_target_distros(rosdistro):
     print("Fetching targets")
     index = get_index(get_index_url())
     rel_file = get_release_file(index, rosdistro)
-    return rel_file.platforms['ubuntu']
+    return rel_file.platforms['fedora']

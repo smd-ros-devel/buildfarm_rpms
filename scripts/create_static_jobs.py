@@ -79,7 +79,7 @@ if __name__ == '__main__':
         for template in templates:
             jobs.append(template)
 
-    jenkins_instance = jenkins_support.JenkinsConfig_to_handle(jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_debs_config()))
+    jenkins_instance = jenkins_support.JenkinsConfig_to_handle(jenkins_support.load_server_config_file(jenkins_support.get_default_catkin_rpms_config()))
 
     for job in jobs:
         template_filename = os.path.join(template_dir, job + '.xml')
